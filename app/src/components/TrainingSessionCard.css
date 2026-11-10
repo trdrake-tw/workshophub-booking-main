@@ -48,7 +48,8 @@
   color: #5b21b6;
 }
 
-.session-badge--full {
+.session-badge--full,
+.session-badge--low-spots {
   background: #fee2e2;
   color: #991b1b;
 }

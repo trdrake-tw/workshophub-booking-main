@@ -37,6 +37,7 @@ function deliveryModeLabel(mode: string): string {
 function TrainingSessionCard({ session, onRegistered }: Props) {
   const spotsLeft = session.capacity - session.registered
   const isFull = spotsLeft <= 0
+  const isLowSpots = !isFull && spotsLeft >= 1 && spotsLeft <= 3
 
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState('')
@@ -106,6 +107,11 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
           {deliveryModeLabel(session.deliveryMode)}
         </span>
         {isFull && <span className="session-badge session-badge--full">Full</span>}
+        {isLowSpots && (
+          <span className="session-badge session-badge--low-spots">
+            Only {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left!
+          </span>
+        )}
       </div>
 
       <h3 className="session-card__title">{session.title}</h3>
