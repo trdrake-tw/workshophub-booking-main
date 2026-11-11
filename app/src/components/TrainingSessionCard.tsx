@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import type { TrainingSession } from '../types'
+import type { Registration, TrainingSession, WaitlistResponse } from '../types'
 import './TrainingSessionCard.css'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
@@ -44,6 +44,8 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const actionLabel = isFull ? 'Join Waitlist' : 'Register'
 
   function resetForm() {
     setName('')
@@ -62,6 +64,7 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
     if (submitting) return
     setSubmitting(true)
     setFormError(null)
+    setSuccessMessage(null)
 
     try {
       const res = await fetch(`${API_BASE}/api/training-sessions/${session.id}/registrations`, {
@@ -71,6 +74,16 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
       })
 
       if (res.ok) {
+        // 202 = waitlisted (session full); 201 = confirmed seat.
+        if (res.status === 202) {
+          const body = (await res.json()) as WaitlistResponse
+          setSuccessMessage(
+            `You're on the waitlist (position ${body.position}). You are not confirmed yet; we'll let you know if a place opens up.`
+          )
+        } else {
+          const body = (await res.json()) as Registration
+          setSuccessMessage(`You're confirmed for this session, ${body.name}.`)
+        }
         setShowForm(false)
         setName('')
         setEmail('')
@@ -84,8 +97,6 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
         const body = (await res.json()) as { error?: string }
         if (res.status === 400 && body?.error) {
           message = body.error
-        } else if (res.status === 409) {
-          message = 'This session is full.'
         } else if (res.status === 404) {
           message = 'Training session not found.'
         }
@@ -134,6 +145,9 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
           <span className="meta-label">Capacity</span>
           <span className="meta-value">
             {session.registered} / {session.capacity} registered
+            {session.waitlisted > 0 && (
+              <span className="waitlisted-count"> · {session.waitlisted} waitlisted</span>
+            )}
             {!isFull && (
               <span className="spots-left">
                 {' '}
@@ -150,51 +164,58 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
             {formError}
           </p>
         )}
-        {!isFull &&
-          (showForm ? (
-            <form className="session-card__form" onSubmit={handleSubmit}>
-              <label className="session-card__field">
-                <span className="session-card__field-label">Name</span>
-                <input
-                  className="session-card__input"
-                  name="name"
-                  type="text"
-                  autoComplete="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </label>
-              <label className="session-card__field">
-                <span className="session-card__field-label">Email</span>
-                <input
-                  className="session-card__input"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </label>
-              <div className="session-card__form-actions">
-                <button type="submit" className="session-card__register" disabled={submitting}>
-                  {submitting ? 'Registering...' : 'Register'}
-                </button>
-                <button type="button" className="session-card__cancel" onClick={handleCancel}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          ) : (
-            <button
-              type="button"
-              className="session-card__register"
-              onClick={() => setShowForm(true)}
-            >
-              Register
-            </button>
-          ))}
+        {successMessage && (
+          <p className="session-card__success" role="status">
+            {successMessage}
+          </p>
+        )}
+        {showForm ? (
+          <form className="session-card__form" onSubmit={handleSubmit}>
+            <label className="session-card__field">
+              <span className="session-card__field-label">Name</span>
+              <input
+                className="session-card__input"
+                name="name"
+                type="text"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </label>
+            <label className="session-card__field">
+              <span className="session-card__field-label">Email</span>
+              <input
+                className="session-card__input"
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </label>
+            <div className="session-card__form-actions">
+              <button type="submit" className="session-card__register" disabled={submitting}>
+                {submitting ? 'Submitting...' : actionLabel}
+              </button>
+              <button type="button" className="session-card__cancel" onClick={handleCancel}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="session-card__register"
+            onClick={() => {
+              setSuccessMessage(null)
+              setShowForm(true)
+            }}
+          >
+            {actionLabel}
+          </button>
+        )}
       </div>
     </article>
   )

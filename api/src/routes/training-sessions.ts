@@ -66,8 +66,12 @@ router.post('/:id/registrations', async (req: Request, res: Response) => {
   const { name, email } = req.body ?? {}
 
   try {
-    const registration = await createRegistration(id, name, email)
-    res.status(201).json(registration)
+    const result = await createRegistration(id, name, email)
+    if (result.status === 'waitlisted') {
+      res.status(202).json({ status: result.status, position: result.position })
+      return
+    }
+    res.status(201).json(result.registration)
   } catch (error) {
     const err = error as { status?: number; error?: string }
     if (typeof err.status === 'number') {

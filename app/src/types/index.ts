@@ -5,6 +5,7 @@ export interface TrainingSession {
   date: string
   capacity: number
   registered: number
+  waitlisted: number
   location: string
   deliveryMode: string
   status: string
@@ -19,4 +20,11 @@ export interface Registration {
   email: string
   status: string
   createdAt: string
+}
+
+export type RegistrationStatus = 'confirmed' | 'waitlisted' | 'cancelled'
+
+export interface WaitlistResponse {
+  status: 'waitlisted'
+  position: number
 }

@@ -34,8 +34,8 @@ model Registration {
   sessionId Int
   name      String
   email     String
-  // Lifecycle states arrive with WH-3/WH-4; reserved now to avoid schema churn.
-  status    String          @default("registered")
+  // confirmed | waitlisted | cancelled (cancelled arrives with WH-4).
+  status    String          @default("confirmed")
   createdAt DateTime        @default(now())
   session   TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
