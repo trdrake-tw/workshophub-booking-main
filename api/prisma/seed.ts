@@ -69,8 +69,8 @@ async function main() {
     ],
   })
 
-  // Purpose-made full fixture (registered === capacity) so the 409 integration
-  // test can target a dedicated session instead of mutating seeded data.
+  // Purpose-made full fixture (registered === capacity) so the full-session integration
+  // tests can target a dedicated session instead of mutating seeded data.
   const fullSession = await prisma.trainingSession.create({
     data: {
       title: 'Full Workshop Fixture',
@@ -90,7 +90,7 @@ async function main() {
       sessionId: fullSession.id,
       name: 'Fixture Attendee One',
       email: 'fixture.one@example.com',
-      status: 'registered',
+      status: 'confirmed',
     },
   })
   await prisma.registration.create({
@@ -98,7 +98,7 @@ async function main() {
       sessionId: fullSession.id,
       name: 'Fixture Attendee Two',
       email: 'fixture.two@example.com',
-      status: 'registered',
+      status: 'confirmed',
     },
   })
 

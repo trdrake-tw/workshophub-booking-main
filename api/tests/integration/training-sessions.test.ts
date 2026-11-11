@@ -52,6 +52,7 @@ describe('GET /api/training-sessions', () => {
       expect(session).toHaveProperty('date')
       expect(session).toHaveProperty('capacity')
       expect(session).toHaveProperty('registered')
+      expect(session).toHaveProperty('waitlisted')
       expect(session).toHaveProperty('location')
       expect(session).toHaveProperty('deliveryMode')
       expect(session).toHaveProperty('status')
@@ -90,12 +91,18 @@ describe('POST /api/training-sessions/:id/registrations', () => {
       .post(`/api/training-sessions/${session.id}/registrations`)
       .send({ name: 'Test Attendee', email: 'test-attendee@example.com' })
 
+    // Restore the counter before asserting, so a failure doesn't leak an increment.
+    await prisma.trainingSession.update({
+      where: { id: session.id },
+      data: { registered: session.registered },
+    })
+
     expect(response.status).toBe(201)
     expect(response.body).toMatchObject({
       sessionId: session.id,
       name: 'Test Attendee',
       email: 'test-attendee@example.com',
-      status: 'registered',
+      status: 'confirmed',
     })
     expect(response.body.id).toBeDefined()
     expect(response.body.createdAt).toBeDefined()
@@ -169,7 +176,7 @@ describe('POST /api/training-sessions/:id/registrations', () => {
     expect(response.body.error).toBeDefined()
   })
 
-  it('returns 409 when the session is full and leaves registered unchanged', async () => {
+  it('returns 202 waitlisted when the session is full and leaves registered unchanged', async () => {
     const session = await getFullSession()
     const original = session.registered
 
@@ -177,8 +184,9 @@ describe('POST /api/training-sessions/:id/registrations', () => {
       .post(`/api/training-sessions/${session.id}/registrations`)
       .send({ name: 'Test Attendee', email: 'test-full@example.com' })
 
-    expect(response.status).toBe(409)
-    expect(response.body.error).toBeDefined()
+    expect(response.status).toBe(202)
+    expect(response.body.status).toBe('waitlisted')
+    expect(response.body.position).toBeGreaterThanOrEqual(1)
 
     const afterResponse = await request(app).get(`/api/training-sessions/${session.id}`)
     expect(afterResponse.status).toBe(200)

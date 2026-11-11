@@ -197,3 +197,7 @@
   color: #16a34a;
   font-weight: 500;
 }
+
+.waitlisted-count {
+  color: var(--color-text-muted);
+}
