@@ -1,5 +1,11 @@
-import { useState, type FormEvent } from 'react'
-import type { Registration, TrainingSession, WaitlistResponse } from '../types'
+import { useEffect, useState, type FormEvent } from 'react'
+import type { MyRegistration, Registration, TrainingSession, WaitlistResponse } from '../types'
+import {
+  forgetMyRegistration,
+  getMyRegistration,
+  markMyRegistrationCancelled,
+  saveMyRegistration,
+} from '../lib/myRegistrations'
 import './TrainingSessionCard.css'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
@@ -45,7 +51,16 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [myRegistration, setMyRegistration] = useState<MyRegistration | null>(() =>
+    getMyRegistration(session)
+  )
+  const [confirmingCancel, setConfirmingCancel] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const actionLabel = isFull ? 'Join Waitlist' : 'Register'
+
+  useEffect(() => {
+    setMyRegistration(getMyRegistration(session))
+  }, [session])
 
   function resetForm() {
     setName('')
@@ -77,11 +92,15 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
         // 202 = waitlisted (session full); 201 = confirmed seat.
         if (res.status === 202) {
           const body = (await res.json()) as WaitlistResponse
+          saveMyRegistration(session, body.id, 'waitlisted')
+          setMyRegistration(getMyRegistration(session))
           setSuccessMessage(
             `You're on the waitlist (position ${body.position}). You are not confirmed yet; we'll let you know if a place opens up.`
           )
         } else {
           const body = (await res.json()) as Registration
+          saveMyRegistration(session, body.id, 'confirmed')
+          setMyRegistration(getMyRegistration(session))
           setSuccessMessage(`You're confirmed for this session, ${body.name}.`)
         }
         setShowForm(false)
@@ -108,6 +127,48 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
       setFormError('Something went wrong. Please try again.')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleConfirmCancel() {
+    if (cancelling || myRegistration === null) return
+    setCancelling(true)
+    setFormError(null)
+    setSuccessMessage(null)
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/training-sessions/${session.id}/registrations/${myRegistration.registrationId}`,
+        { method: 'DELETE' }
+      )
+
+      if (res.status === 200) {
+        markMyRegistrationCancelled(session.id)
+        setMyRegistration(getMyRegistration(session))
+        setSuccessMessage('Your registration has been cancelled')
+        setConfirmingCancel(false)
+        onRegistered()
+        return
+      }
+      if (res.status === 409) {
+        markMyRegistrationCancelled(session.id)
+        setMyRegistration(getMyRegistration(session))
+        setSuccessMessage('This registration was already cancelled')
+        setConfirmingCancel(false)
+        return
+      }
+      if (res.status === 404) {
+        forgetMyRegistration(session.id)
+        setMyRegistration(getMyRegistration(session))
+        setFormError('We could not find that registration. It may have been removed.')
+        setConfirmingCancel(false)
+        return
+      }
+      setFormError('Something went wrong. Please try again.')
+    } catch {
+      setFormError('Something went wrong. Please try again.')
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -168,6 +229,45 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
           <p className="session-card__success" role="status">
             {successMessage}
           </p>
+        )}
+        {myRegistration?.status === 'confirmed' && !confirmingCancel && (
+          <button
+            type="button"
+            className="session-card__cancel-registration"
+            onClick={() => {
+              setSuccessMessage(null)
+              setConfirmingCancel(true)
+            }}
+          >
+            Cancel Registration
+          </button>
+        )}
+        {confirmingCancel && (
+          <div role="alertdialog" className="session-card__confirm">
+            <p>Are you sure you want to cancel your registration for {session.title}?</p>
+            <div className="session-card__form-actions">
+              <button
+                type="button"
+                className="session-card__cancel-registration"
+                onClick={handleConfirmCancel}
+                disabled={cancelling}
+              >
+                {cancelling ? 'Cancelling...' : 'Yes, cancel registration'}
+              </button>
+              <button
+                type="button"
+                className="session-card__cancel"
+                onClick={() => setConfirmingCancel(false)}
+              >
+                Keep my registration
+              </button>
+            </div>
+          </div>
+        )}
+        {myRegistration?.status === 'cancelled' && (
+          <button type="button" className="session-card__cancel-registration" disabled>
+            Cancelled
+          </button>
         )}
         {showForm ? (
           <form className="session-card__form" onSubmit={handleSubmit}>

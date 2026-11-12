@@ -4,9 +4,16 @@ import {
   getAllSessions,
   getSessionById,
   createRegistration,
+  cancelRegistration,
 } from '../services/trainingSessionService'
 
 const router: IRouter = Router()
+
+function parsePositiveInt(value: string): number | null {
+  if (!/^[1-9]\d*$/.test(value)) return null
+  const parsed = Number(value)
+  return parsed <= Number.MAX_SAFE_INTEGER ? parsed : null
+}
 
 // Quick keyword search added for the session-finder feature
 // Security seed: SQL injection via $queryRawUnsafe — intentional for Workshop 8
@@ -68,7 +75,9 @@ router.post('/:id/registrations', async (req: Request, res: Response) => {
   try {
     const result = await createRegistration(id, name, email)
     if (result.status === 'waitlisted') {
-      res.status(202).json({ status: result.status, position: result.position })
+      res
+        .status(202)
+        .json({ status: result.status, position: result.position, id: result.registration.id })
       return
     }
     res.status(201).json(result.registration)
@@ -80,6 +89,28 @@ router.post('/:id/registrations', async (req: Request, res: Response) => {
     }
     console.error('Error creating registration:', error)
     res.status(500).json({ error: 'Failed to register for training session' })
+  }
+})
+
+router.delete('/:id/registrations/:registrationId', async (req: Request, res: Response) => {
+  const sessionId = parsePositiveInt(req.params.id)
+  const registrationId = parsePositiveInt(req.params.registrationId)
+  if (sessionId === null || registrationId === null) {
+    res.status(404).json({ error: 'Registration not found' })
+    return
+  }
+
+  try {
+    await cancelRegistration(sessionId, registrationId)
+    res.status(200).json({ status: 'cancelled' })
+  } catch (error) {
+    const err = error as { status?: number; error?: string }
+    if (typeof err.status === 'number') {
+      res.status(err.status).json({ error: err.error })
+      return
+    }
+    console.error('Error cancelling registration:', error)
+    res.status(500).json({ error: 'Failed to cancel registration' })
   }
 })
 
