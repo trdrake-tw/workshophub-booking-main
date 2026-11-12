@@ -27,4 +27,15 @@ export type RegistrationStatus = 'confirmed' | 'waitlisted' | 'cancelled'
 export interface WaitlistResponse {
   status: 'waitlisted'
   position: number
+  id: number
+}
+
+export interface MyRegistration {
+  registrationId: number
+  status: RegistrationStatus
+  sessionCreatedAt: string
+}
+
+export interface CancelRegistrationResponse {
+  status: 'cancelled'
 }

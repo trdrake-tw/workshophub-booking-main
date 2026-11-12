@@ -1,4 +1,4 @@
-import type { Registration, TrainingSession } from '@prisma/client'
+import type { Prisma, Registration, TrainingSession } from '@prisma/client'
 import prisma from '../lib/prisma'
 
 export const REGISTRATION_STATUS = {
@@ -13,6 +13,12 @@ export type SessionWithCounts = TrainingSession & { waitlisted: number }
 export type RegistrationResult =
   | { status: 'confirmed'; registration: Registration }
   | { status: 'waitlisted'; registration: Registration; position: number }
+
+export type CancelRegistrationResult = {
+  status: 'cancelled'
+  registrationId: number
+  previousStatus: 'confirmed' | 'waitlisted'
+}
 
 const waitlistedCount = {
   _count: {
@@ -110,5 +116,59 @@ export async function createRegistration(
     })
 
     return { status: 'waitlisted', registration, position }
+  })
+}
+
+// WH-5 implements promotion here, inside the cancellation transaction, and returns the promoted registration's id.
+async function promoteFromWaitlist(
+  _tx: Prisma.TransactionClient,
+  _sessionId: number
+): Promise<number | null> {
+  return null
+}
+
+export async function cancelRegistration(
+  sessionId: number,
+  registrationId: number
+): Promise<CancelRegistrationResult> {
+  return prisma.$transaction(async (tx): Promise<CancelRegistrationResult> => {
+    const existing = await tx.registration.findFirst({
+      where: { id: registrationId, sessionId },
+      select: { status: true },
+    })
+    if (!existing) {
+      throw { status: 404, error: 'Registration not found' }
+    }
+    if (existing.status === REGISTRATION_STATUS.cancelled) {
+      throw { status: 409, error: 'Registration is already cancelled' }
+    }
+    if (
+      existing.status !== REGISTRATION_STATUS.confirmed &&
+      existing.status !== REGISTRATION_STATUS.waitlisted
+    ) {
+      throw { status: 409, error: 'Registration cannot be cancelled' }
+    }
+    const previousStatus = existing.status
+
+    // Conditional on the status just read: if a concurrent cancel got there
+    // first, no row matches and this request becomes the 409.
+    const flipped = await tx.registration.updateMany({
+      where: { id: registrationId, sessionId, status: previousStatus },
+      data: { status: REGISTRATION_STATUS.cancelled },
+    })
+    if (flipped.count === 0) {
+      throw { status: 409, error: 'Registration is already cancelled' }
+    }
+
+    if (previousStatus === REGISTRATION_STATUS.confirmed) {
+      // The registered > 0 guard keeps drifted data from going negative.
+      await tx.trainingSession.updateMany({
+        where: { id: sessionId, registered: { gt: 0 } },
+        data: { registered: { decrement: 1 } },
+      })
+      await promoteFromWaitlist(tx, sessionId)
+    }
+
+    return { status: 'cancelled', registrationId, previousStatus }
   })
 }

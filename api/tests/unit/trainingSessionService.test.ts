@@ -2,6 +2,7 @@ import {
   getAllSessions,
   getSessionById,
   createRegistration,
+  cancelRegistration,
 } from '../../src/services/trainingSessionService'
 import prisma from '../../src/lib/prisma'
 
@@ -16,6 +17,8 @@ jest.mock('../../src/lib/prisma', () => ({
     registration: {
       create: jest.fn(),
       count: jest.fn(),
+      findFirst: jest.fn(),
+      updateMany: jest.fn(),
     },
     $transaction: jest.fn(),
   },
@@ -26,6 +29,8 @@ const mockFindUnique = prisma.trainingSession.findUnique as jest.Mock
 const mockUpdateMany = prisma.trainingSession.updateMany as jest.Mock
 const mockRegistrationCreate = prisma.registration.create as jest.Mock
 const mockRegistrationCount = prisma.registration.count as jest.Mock
+const mockRegistrationFindFirst = prisma.registration.findFirst as jest.Mock
+const mockRegistrationUpdateMany = prisma.registration.updateMany as jest.Mock
 const mockTransaction = prisma.$transaction as jest.Mock
 
 const mockSession = {
@@ -185,5 +190,82 @@ describe('createRegistration', () => {
     expect(mockRegistrationCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ status: 'waitlisted' }),
     })
+  })
+})
+
+describe('cancelRegistration', () => {
+  function useTransaction() {
+    mockTransaction.mockImplementation((fn) =>
+      fn({
+        trainingSession: { updateMany: mockUpdateMany },
+        registration: {
+          findFirst: mockRegistrationFindFirst,
+          updateMany: mockRegistrationUpdateMany,
+        },
+      })
+    )
+  }
+
+  it('cancels a confirmed registration and decrements the session counter', async () => {
+    mockRegistrationFindFirst.mockResolvedValue({ status: 'confirmed' })
+    mockRegistrationUpdateMany.mockResolvedValue({ count: 1 })
+    mockUpdateMany.mockResolvedValue({ count: 1 })
+    useTransaction()
+
+    const result = await cancelRegistration(1, 5)
+
+    expect(result).toEqual({ status: 'cancelled', registrationId: 5, previousStatus: 'confirmed' })
+    expect(mockRegistrationUpdateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: 5, sessionId: 1, status: 'confirmed' }),
+      data: { status: 'cancelled' },
+    })
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 1, registered: { gt: 0 } },
+      data: { registered: { decrement: 1 } },
+    })
+  })
+
+  it('cancels a waitlisted registration without touching the session counter', async () => {
+    mockRegistrationFindFirst.mockResolvedValue({ status: 'waitlisted' })
+    mockRegistrationUpdateMany.mockResolvedValue({ count: 1 })
+    useTransaction()
+
+    const result = await cancelRegistration(1, 6)
+
+    expect(result).toEqual({ status: 'cancelled', registrationId: 6, previousStatus: 'waitlisted' })
+    expect(mockUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it('throws 404 when the registration does not exist in that session', async () => {
+    mockRegistrationFindFirst.mockResolvedValue(null)
+    useTransaction()
+
+    await expect(cancelRegistration(1, 999)).rejects.toEqual({
+      status: 404,
+      error: 'Registration not found',
+    })
+  })
+
+  it('throws 409 when the registration is already cancelled', async () => {
+    mockRegistrationFindFirst.mockResolvedValue({ status: 'cancelled' })
+    useTransaction()
+
+    await expect(cancelRegistration(1, 5)).rejects.toEqual({
+      status: 409,
+      error: 'Registration is already cancelled',
+    })
+    expect(mockRegistrationUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it('throws 409 and leaves the counter alone when another request cancelled it first', async () => {
+    mockRegistrationFindFirst.mockResolvedValue({ status: 'confirmed' })
+    mockRegistrationUpdateMany.mockResolvedValue({ count: 0 })
+    useTransaction()
+
+    await expect(cancelRegistration(1, 5)).rejects.toEqual({
+      status: 409,
+      error: 'Registration is already cancelled',
+    })
+    expect(mockUpdateMany).not.toHaveBeenCalled()
   })
 })
