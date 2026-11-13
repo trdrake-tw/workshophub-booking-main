@@ -51,6 +51,6 @@ describe('DELETE /api/training-sessions/:id/registrations/:registrationId', () =
     )
 
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({ status: 'cancelled' })
+    expect(res.body).toEqual({ status: 'cancelled', promotedRegistrationId: null })
   })
 })

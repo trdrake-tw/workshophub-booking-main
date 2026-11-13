@@ -198,6 +198,20 @@
   font-weight: 500;
 }
 
+.session-card__my-status {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.session-card__my-status--confirmed {
+  color: #16a34a;
+}
+
+.session-card__my-status--waitlisted {
+  color: #991b1b;
+}
+
 .waitlisted-count {
   color: var(--color-text-muted);
 }

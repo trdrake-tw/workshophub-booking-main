@@ -38,4 +38,10 @@ export interface MyRegistration {
 
 export interface CancelRegistrationResponse {
   status: 'cancelled'
+  promotedRegistrationId: number | null
+}
+
+export interface RegistrationStatusResponse {
+  id: number
+  status: RegistrationStatus
 }

@@ -2,7 +2,7 @@ import type { MyRegistration, RegistrationStatus, TrainingSession } from '../typ
 
 const STORAGE_KEY = 'workshophub.myRegistrations.v1'
 
-function isRegistrationStatus(value: unknown): value is RegistrationStatus {
+export function isRegistrationStatus(value: unknown): value is RegistrationStatus {
   return value === 'confirmed' || value === 'waitlisted' || value === 'cancelled'
 }
 
@@ -64,12 +64,16 @@ export function saveMyRegistration(
   writeAll(all)
 }
 
-export function markMyRegistrationCancelled(sessionId: number): void {
+export function updateMyRegistrationStatus(sessionId: number, status: RegistrationStatus): void {
   const all = readAll()
   const entry = all[String(sessionId)]
   if (!entry) return
-  all[String(sessionId)] = { ...entry, status: 'cancelled' }
+  all[String(sessionId)] = { ...entry, status }
   writeAll(all)
+}
+
+export function markMyRegistrationCancelled(sessionId: number): void {
+  updateMyRegistrationStatus(sessionId, 'cancelled')
 }
 
 export function forgetMyRegistration(sessionId: number): void {
