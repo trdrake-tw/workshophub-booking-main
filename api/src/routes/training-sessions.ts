@@ -5,6 +5,7 @@ import {
   getSessionById,
   createRegistration,
   cancelRegistration,
+  getRegistrationStatus,
 } from '../services/trainingSessionService'
 
 const router: IRouter = Router()
@@ -92,6 +93,27 @@ router.post('/:id/registrations', async (req: Request, res: Response) => {
   }
 })
 
+router.get('/:id/registrations/:registrationId', async (req: Request, res: Response) => {
+  const sessionId = parsePositiveInt(req.params.id)
+  const registrationId = parsePositiveInt(req.params.registrationId)
+  if (sessionId === null || registrationId === null) {
+    res.status(404).json({ error: 'Registration not found' })
+    return
+  }
+
+  try {
+    const registration = await getRegistrationStatus(sessionId, registrationId)
+    if (!registration) {
+      res.status(404).json({ error: 'Registration not found' })
+      return
+    }
+    res.status(200).json({ id: registration.id, status: registration.status })
+  } catch (error) {
+    console.error('Error fetching registration:', error)
+    res.status(500).json({ error: 'Failed to fetch registration' })
+  }
+})
+
 router.delete('/:id/registrations/:registrationId', async (req: Request, res: Response) => {
   const sessionId = parsePositiveInt(req.params.id)
   const registrationId = parsePositiveInt(req.params.registrationId)
@@ -101,8 +123,10 @@ router.delete('/:id/registrations/:registrationId', async (req: Request, res: Re
   }
 
   try {
-    await cancelRegistration(sessionId, registrationId)
-    res.status(200).json({ status: 'cancelled' })
+    const result = await cancelRegistration(sessionId, registrationId)
+    res
+      .status(200)
+      .json({ status: 'cancelled', promotedRegistrationId: result.promotedRegistrationId })
   } catch (error) {
     const err = error as { status?: number; error?: string }
     if (typeof err.status === 'number') {

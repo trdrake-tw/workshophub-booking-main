@@ -3,6 +3,7 @@ import {
   getSessionById,
   createRegistration,
   cancelRegistration,
+  getRegistrationStatus,
 } from '../../src/services/trainingSessionService'
 import prisma from '../../src/lib/prisma'
 
@@ -207,14 +208,21 @@ describe('cancelRegistration', () => {
   }
 
   it('cancels a confirmed registration and decrements the session counter', async () => {
-    mockRegistrationFindFirst.mockResolvedValue({ status: 'confirmed' })
+    mockRegistrationFindFirst
+      .mockResolvedValueOnce({ status: 'confirmed' })
+      .mockResolvedValueOnce(null)
     mockRegistrationUpdateMany.mockResolvedValue({ count: 1 })
     mockUpdateMany.mockResolvedValue({ count: 1 })
     useTransaction()
 
     const result = await cancelRegistration(1, 5)
 
-    expect(result).toEqual({ status: 'cancelled', registrationId: 5, previousStatus: 'confirmed' })
+    expect(result).toEqual({
+      status: 'cancelled',
+      registrationId: 5,
+      previousStatus: 'confirmed',
+      promotedRegistrationId: null,
+    })
     expect(mockRegistrationUpdateMany).toHaveBeenCalledWith({
       where: expect.objectContaining({ id: 5, sessionId: 1, status: 'confirmed' }),
       data: { status: 'cancelled' },
@@ -225,6 +233,93 @@ describe('cancelRegistration', () => {
     })
   })
 
+  it('promotes the first waitlisted registration and leaves the counter alone', async () => {
+    mockRegistrationFindFirst
+      .mockResolvedValueOnce({ status: 'confirmed' })
+      .mockResolvedValueOnce({ id: 7 })
+    mockRegistrationUpdateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 })
+    useTransaction()
+
+    const result = await cancelRegistration(1, 5)
+
+    expect(result.promotedRegistrationId).toBe(7)
+    expect(mockUpdateMany).not.toHaveBeenCalled()
+    expect(mockRegistrationFindFirst).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: { sessionId: 1, status: 'waitlisted' },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      })
+    )
+    expect(mockRegistrationUpdateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: 7, sessionId: 1, status: 'waitlisted' },
+      data: { status: 'confirmed' },
+    })
+  })
+
+  it('tries the next candidate when the first was changed concurrently', async () => {
+    mockRegistrationFindFirst
+      .mockResolvedValueOnce({ status: 'confirmed' })
+      .mockResolvedValueOnce({ id: 7 })
+      .mockResolvedValueOnce({ id: 8 })
+    mockRegistrationUpdateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 })
+    useTransaction()
+
+    const result = await cancelRegistration(1, 5)
+
+    expect(result.promotedRegistrationId).toBe(8)
+    expect(mockUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it('decrements when every promotion attempt loses its race', async () => {
+    mockRegistrationFindFirst
+      .mockResolvedValueOnce({ status: 'confirmed' })
+      .mockResolvedValueOnce({ id: 7 })
+      .mockResolvedValueOnce({ id: 8 })
+      .mockResolvedValueOnce({ id: 9 })
+    mockRegistrationUpdateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 0 })
+    mockUpdateMany.mockResolvedValue({ count: 1 })
+    useTransaction()
+
+    const result = await cancelRegistration(1, 5)
+
+    expect(result.promotedRegistrationId).toBeNull()
+    expect(mockUpdateMany).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not look for a candidate when a waitlisted registration is cancelled', async () => {
+    mockRegistrationFindFirst.mockResolvedValueOnce({ status: 'waitlisted' })
+    mockRegistrationUpdateMany.mockResolvedValueOnce({ count: 1 })
+    useTransaction()
+
+    const result = await cancelRegistration(1, 6)
+
+    expect(mockRegistrationFindFirst).toHaveBeenCalledTimes(1)
+    expect(result.promotedRegistrationId).toBeNull()
+  })
+
+  it('propagates a failure inside promotion so the cancellation rolls back', async () => {
+    mockRegistrationFindFirst
+      .mockResolvedValueOnce({ status: 'confirmed' })
+      .mockResolvedValueOnce({ id: 7 })
+    mockRegistrationUpdateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockRejectedValueOnce(new Error('boom'))
+    useTransaction()
+
+    await expect(cancelRegistration(1, 5)).rejects.toThrow('boom')
+    expect(mockUpdateMany).not.toHaveBeenCalled()
+  })
+
   it('cancels a waitlisted registration without touching the session counter', async () => {
     mockRegistrationFindFirst.mockResolvedValue({ status: 'waitlisted' })
     mockRegistrationUpdateMany.mockResolvedValue({ count: 1 })
@@ -232,7 +327,12 @@ describe('cancelRegistration', () => {
 
     const result = await cancelRegistration(1, 6)
 
-    expect(result).toEqual({ status: 'cancelled', registrationId: 6, previousStatus: 'waitlisted' })
+    expect(result).toEqual({
+      status: 'cancelled',
+      registrationId: 6,
+      previousStatus: 'waitlisted',
+      promotedRegistrationId: null,
+    })
     expect(mockUpdateMany).not.toHaveBeenCalled()
   })
 
@@ -267,5 +367,27 @@ describe('cancelRegistration', () => {
       error: 'Registration is already cancelled',
     })
     expect(mockUpdateMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('getRegistrationStatus', () => {
+  it('returns the id and status of a registration in that session', async () => {
+    mockRegistrationFindFirst.mockResolvedValue({ id: 7, status: 'confirmed' })
+
+    const result = await getRegistrationStatus(1, 7)
+
+    expect(result).toEqual({ id: 7, status: 'confirmed' })
+    expect(mockRegistrationFindFirst).toHaveBeenCalledWith({
+      where: { id: 7, sessionId: 1 },
+      select: { id: true, status: true },
+    })
+  })
+
+  it('returns null when the registration is not found', async () => {
+    mockRegistrationFindFirst.mockResolvedValue(null)
+
+    const result = await getRegistrationStatus(1, 999)
+
+    expect(result).toBeNull()
   })
 })

@@ -1,10 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import type { MyRegistration, Registration, TrainingSession, WaitlistResponse } from '../types'
+import type {
+  MyRegistration,
+  Registration,
+  RegistrationStatusResponse,
+  TrainingSession,
+  WaitlistResponse,
+} from '../types'
 import {
   forgetMyRegistration,
   getMyRegistration,
+  isRegistrationStatus,
   markMyRegistrationCancelled,
   saveMyRegistration,
+  updateMyRegistrationStatus,
 } from '../lib/myRegistrations'
 import './TrainingSessionCard.css'
 
@@ -59,7 +67,49 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
   const actionLabel = isFull ? 'Join Waitlist' : 'Register'
 
   useEffect(() => {
-    setMyRegistration(getMyRegistration(session))
+    let ignore = false
+    const saved = getMyRegistration(session)
+    setMyRegistration(saved)
+    if (!saved) {
+      return () => {
+        ignore = true
+      }
+    }
+
+    async function refresh(registrationId: number, savedStatus: MyRegistration['status']) {
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/training-sessions/${session.id}/registrations/${registrationId}`
+        )
+        if (ignore) return
+        if (res.status === 404) {
+          forgetMyRegistration(session.id)
+          setMyRegistration(null)
+          return
+        }
+        if (!res.ok) return
+        const body: unknown = await res.json()
+        if (ignore) return
+        if (
+          typeof body === 'object' &&
+          body !== null &&
+          'status' in body &&
+          isRegistrationStatus(body.status) &&
+          body.status !== savedStatus
+        ) {
+          const status: RegistrationStatusResponse['status'] = body.status
+          updateMyRegistrationStatus(session.id, status)
+          setMyRegistration(getMyRegistration(session))
+        }
+      } catch {
+        // Background check: keep the saved status if the server can't be reached.
+      }
+    }
+
+    refresh(saved.registrationId, saved.status)
+    return () => {
+      ignore = true
+    }
   }, [session])
 
   function resetForm() {
@@ -228,6 +278,13 @@ function TrainingSessionCard({ session, onRegistered }: Props) {
         {successMessage && (
           <p className="session-card__success" role="status">
             {successMessage}
+          </p>
+        )}
+        {(myRegistration?.status === 'confirmed' || myRegistration?.status === 'waitlisted') && (
+          <p
+            className={`session-card__my-status session-card__my-status--${myRegistration.status}`}
+          >
+            Your registration: {myRegistration.status === 'confirmed' ? 'Confirmed' : 'Waitlisted'}
           </p>
         )}
         {myRegistration?.status === 'confirmed' && !confirmingCancel && (

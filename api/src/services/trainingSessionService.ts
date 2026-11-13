@@ -7,6 +7,14 @@ export const REGISTRATION_STATUS = {
   cancelled: 'cancelled',
 } as const
 
+// Waitlist order: earliest createdAt first, id breaks ties. WH-3's position count uses the same order.
+const WAITLIST_ORDER = [
+  { createdAt: 'asc' },
+  { id: 'asc' },
+] as const satisfies Prisma.RegistrationOrderByWithRelationInput[]
+
+const MAX_PROMOTION_ATTEMPTS = 3
+
 // `registered` is the confirmed-only counter; `waitlisted` is derived from registrations.
 export type SessionWithCounts = TrainingSession & { waitlisted: number }
 
@@ -18,7 +26,10 @@ export type CancelRegistrationResult = {
   status: 'cancelled'
   registrationId: number
   previousStatus: 'confirmed' | 'waitlisted'
+  promotedRegistrationId: number | null
 }
+
+export type RegistrationStatusView = { id: number; status: string }
 
 const waitlistedCount = {
   _count: {
@@ -119,11 +130,26 @@ export async function createRegistration(
   })
 }
 
-// WH-5 implements promotion here, inside the cancellation transaction, and returns the promoted registration's id.
+// Hands the freed seat to the first waitlisted registration in the same transaction. Returns its id, or null if nobody could be promoted.
 async function promoteFromWaitlist(
-  _tx: Prisma.TransactionClient,
-  _sessionId: number
+  tx: Prisma.TransactionClient,
+  sessionId: number
 ): Promise<number | null> {
+  for (let attempt = 0; attempt < MAX_PROMOTION_ATTEMPTS; attempt++) {
+    const candidate = await tx.registration.findFirst({
+      where: { sessionId, status: REGISTRATION_STATUS.waitlisted },
+      orderBy: WAITLIST_ORDER,
+      select: { id: true },
+    })
+    if (!candidate) return null
+
+    const promoted = await tx.registration.updateMany({
+      where: { id: candidate.id, sessionId, status: REGISTRATION_STATUS.waitlisted },
+      data: { status: REGISTRATION_STATUS.confirmed },
+    })
+    if (promoted.count > 0) return candidate.id
+    // No match: the candidate changed concurrently, so try the next one.
+  }
   return null
 }
 
@@ -160,15 +186,29 @@ export async function cancelRegistration(
       throw { status: 409, error: 'Registration is already cancelled' }
     }
 
+    let promotedRegistrationId: number | null = null
     if (previousStatus === REGISTRATION_STATUS.confirmed) {
-      // The registered > 0 guard keeps drifted data from going negative.
-      await tx.trainingSession.updateMany({
-        where: { id: sessionId, registered: { gt: 0 } },
-        data: { registered: { decrement: 1 } },
-      })
-      await promoteFromWaitlist(tx, sessionId)
+      promotedRegistrationId = await promoteFromWaitlist(tx, sessionId)
+      // A promotion transfers the seat, so registered only changes when nobody was promoted.
+      if (promotedRegistrationId === null) {
+        // The registered > 0 guard keeps drifted data from going negative.
+        await tx.trainingSession.updateMany({
+          where: { id: sessionId, registered: { gt: 0 } },
+          data: { registered: { decrement: 1 } },
+        })
+      }
     }
 
-    return { status: 'cancelled', registrationId, previousStatus }
+    return { status: 'cancelled', registrationId, previousStatus, promotedRegistrationId }
+  })
+}
+
+export async function getRegistrationStatus(
+  sessionId: number,
+  registrationId: number
+): Promise<RegistrationStatusView | null> {
+  return prisma.registration.findFirst({
+    where: { id: registrationId, sessionId },
+    select: { id: true, status: true },
   })
 }
