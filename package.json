@@ -8,6 +8,7 @@
     "test": "pnpm --filter @workshophub/api test",
     "lint": "pnpm --filter @workshophub/app lint && pnpm --filter @workshophub/api lint",
     "format-check": "pnpm --filter @workshophub/app format-check && pnpm --filter @workshophub/api format-check",
+    "typecheck": "pnpm --filter @workshophub/app typecheck && pnpm --filter @workshophub/api typecheck",
     "prepare": "husky"
   },
   "devDependencies": {

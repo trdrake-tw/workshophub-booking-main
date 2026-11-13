@@ -2,7 +2,7 @@ SHELL := /bin/bash
 ROOT_DIR := $(shell pwd)
 API_DIR := $(ROOT_DIR)/api
 
-.PHONY: setup dev test test-unit lint format-check build seed reset-db smoke-test security reasons-lint prod-up prod-down prod-logs
+.PHONY: setup dev test test-unit lint format-check typecheck build seed reset-db smoke-test security reasons-lint prod-up prod-down prod-logs
 
 ## setup: Install dependencies, generate Prisma client, push schema, seed database
 setup:
@@ -33,6 +33,10 @@ lint:
 ## format-check: Check Prettier formatting on all packages
 format-check:
 	pnpm run format-check
+
+## typecheck: Type-check all packages without emitting (used by /sensor-and-fix)
+typecheck:
+	pnpm run typecheck
 
 ## build: Build frontend and backend
 build:

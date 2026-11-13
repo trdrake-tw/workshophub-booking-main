@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.tsx",
-    "format-check": "prettier --check 'src/**/*.{ts,tsx,css}'"
+    "format-check": "prettier --check 'src/**/*.{ts,tsx,css}'",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
     "react": "^18.3.1",
