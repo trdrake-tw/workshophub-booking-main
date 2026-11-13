@@ -9,7 +9,7 @@ WorkshopHub is an internal training registration system. Employees browse and re
 - `app/`: React 18 + TypeScript + Vite 5 frontend
 - Ports: frontend 5173 and API 3001 in dev; 8080 for prod (frontend + API in one container)
 - Testing: Jest + Supertest (`api/`). Linting: ESLint + Prettier. Git hooks: Husky (pre-push: test + lint). CI: GitHub Actions (`pr-check`, `security`, `build-and-prod`)
-- The `Makefile` is the stable command interface: `make setup`, `make dev`, `make test`, `make lint`, `make format-check`, `make build`, `make seed`, `make reset-db`, `make smoke-test`
+- The `Makefile` is the stable command interface: `make setup`, `make dev`, `make test`, `make lint`, `make format-check`, `make typecheck`, `make build`, `make seed`, `make reset-db`, `make smoke-test`
 
 ## Team Norms
 
