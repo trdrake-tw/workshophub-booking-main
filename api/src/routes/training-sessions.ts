@@ -7,6 +7,7 @@ import {
   cancelRegistration,
   getRegistrationStatus,
 } from '../services/trainingSessionService'
+import { getAuditHistory } from '../services/auditLogService'
 
 const router: IRouter = Router()
 
@@ -111,6 +112,27 @@ router.get('/:id/registrations/:registrationId', async (req: Request, res: Respo
   } catch (error) {
     console.error('Error fetching registration:', error)
     res.status(500).json({ error: 'Failed to fetch registration' })
+  }
+})
+
+router.get('/:id/registrations/:registrationId/audit', async (req: Request, res: Response) => {
+  const sessionId = parsePositiveInt(req.params.id)
+  const registrationId = parsePositiveInt(req.params.registrationId)
+  if (sessionId === null || registrationId === null) {
+    res.status(404).json({ error: 'Registration not found' })
+    return
+  }
+
+  try {
+    const history = await getAuditHistory(sessionId, registrationId)
+    if (!history) {
+      res.status(404).json({ error: 'Registration not found' })
+      return
+    }
+    res.status(200).json(history)
+  } catch (error) {
+    console.error('Error fetching audit history:', error)
+    res.status(500).json({ error: 'Failed to fetch audit history' })
   }
 })
 
