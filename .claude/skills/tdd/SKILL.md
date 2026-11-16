@@ -11,7 +11,7 @@ Run **one** red-green loop for **one** slice (one acceptance criterion or one Op
 
 - **ONE slice per run, then stop.** Never start the next criterion, Operation or story, even if the navigator's paste contains several or the loop finished quickly.
 - **Delegate.** Tests come from `test-writer`, implementation from `implementer`. Don't write or edit files under `api/tests/` or `api/src/` yourself, and don't "just fix" what an agent got wrong: send it back to that agent.
-- **RED needs the navigator's confirmation.** Don't delegate to `implementer` until the navigator has confirmed the tests fail for the right reason.
+- **RED must be checked before GREEN.** Don't delegate to `implementer` until RED has been confirmed for the right reason: automatically by default, or by the navigator if they asked to confirm it themselves (see step 4).
 - **You run `make test`.** Don't take an agent's word for red or green.
 - **Never weaken a test to get green.** No skipping or deleting tests, no `--no-verify`, no config changes.
 
@@ -39,12 +39,16 @@ Run **one** red-green loop for **one** slice (one acceptance criterion or one Op
    - whether anything outside the new tests failed
    - the test-writer's Assumptions, if any
 
-   Then **stop and ask the navigator to confirm RED for the right reason**: the tests fail because the behaviour is missing, not because of a typo, a bad import or a type error. Wait for their reply. Don't implement yet.
+   Then **check RED for the right reason**: the tests fail because the behaviour is missing, not because of a typo, a bad import or a type error. By default you check it yourself and carry on without waiting. RED is confirmed when all of these hold:
+   - every failure is in the new tests, and every test that passed before still passes;
+   - each new test fails on an assertion about the missing behaviour, or its suite fails only because a module or export the slice creates doesn't exist yet;
+   - no failure comes from a typo, a wrong import path to an existing module, a syntax error or a broken fixture.
 
-   - If the new tests pass already, or fail for the wrong reason, say so and send the problem back to `test-writer` (or ask the navigator), then rerun this step.
-   - If the navigator wants the tests changed, send that to `test-writer` and rerun this step.
+   - If the new tests pass already: when the slice's text says the behaviour is already in place (e.g. a guard added by an earlier slice), record that and skip step 5. Otherwise it's the wrong reason.
+   - If it fails for the wrong reason, send the problem back to `test-writer` once and rerun this step. If it's still wrong, stop and report.
+   - **Manual mode:** if the navigator asked to confirm RED themselves, show them the output and the Assumptions, and wait for their reply instead. If they want the tests changed, send that to `test-writer` and rerun this step.
 
-5. **GREEN: delegate to `implementer`.** Only after the navigator confirms RED. Send it the same packet plus the failing-tests context: the test file paths, the failing `it` names and the failure output from step 4.
+5. **GREEN: delegate to `implementer`.** Only after RED is confirmed. Send it the same packet plus the failing-tests context: the test file paths, the failing `it` names and the failure output from step 4.
 
 6. **Run `make test` again.** Run it yourself and confirm every test passes, the new ones and the existing ones. Show the totals. If it isn't green, send the output back to `implementer` once; if it's still not green after that, stop and report to the navigator instead of looping.
 
@@ -59,11 +63,11 @@ Run **one** red-green loop for **one** slice (one acceptance criterion or one Op
 
 ## Common mistakes
 
-| Mistake                                           | Fix                                                     |
-| ------------------------------------------------- | ------------------------------------------------------- |
-| Paste has four criteria, so you test all four     | Ask which ONE; list the rest as out of scope            |
-| Trimming Approach or Operations out of the packet | Pass through what the navigator provided                |
-| Going straight from test-writer to implementer    | Run `make test`, show the failure, wait for RED confirm |
-| Trusting the agent's "tests fail" / "all green"   | Run `make test` yourself                                |
-| Fixing a failing test or a bug yourself           | Send it back to the agent that owns it                  |
-| Green came quickly, so you start the next slice   | Stop. One slice per run                                 |
+| Mistake                                           | Fix                                          |
+| ------------------------------------------------- | -------------------------------------------- |
+| Paste has four criteria, so you test all four     | Ask which ONE; list the rest as out of scope |
+| Trimming Approach or Operations out of the packet | Pass through what the navigator provided     |
+| Going straight from test-writer to implementer    | Run `make test` and check RED first          |
+| Trusting the agent's "tests fail" / "all green"   | Run `make test` yourself                     |
+| Fixing a failing test or a bug yourself           | Send it back to the agent that owns it       |
+| Green came quickly, so you start the next slice   | Stop. One slice per run                      |

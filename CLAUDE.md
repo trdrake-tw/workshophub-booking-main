@@ -16,7 +16,7 @@ WorkshopHub is an internal training registration system. Employees browse and re
 1. No `any`: never use TypeScript `any` (including `as any`). Use explicit types, `unknown` with narrowing, or generics.
 2. No direct Prisma in routes: Express route handlers must not import or call Prisma directly. Put all DB access in a service/repository layer and keep routes thin (validation, auth, HTTP mapping only).
 3. All code must pass `make test` and `make lint`: run both before opening a PR or pushing. Fix failures; do not disable rules or skip tests to get green.
-4. Story slices go through `/tdd`: when test-driving an acceptance criterion or Operation, use the project `tdd` skill (`.claude/skills/tdd/SKILL.md`), which delegates to the `test-writer` and `implementer` agents. It takes precedence over any general-purpose TDD skill (e.g. `superpowers:test-driven-development`); don't write the tests or implementation for a slice in the main session.
+4. Story slices are test-driven by the project agents: the `test-writer` agent writes the failing tests and the `implementer` agent makes them pass, one acceptance criterion or Operation at a time. Run a slice with the project `tdd` skill (`.claude/skills/tdd/SKILL.md`), or a whole story with the `deliver-story` workflow (`.claude/workflows/deliver-story.js`). These take precedence over any general-purpose TDD skill (e.g. `superpowers:test-driven-development`); don't write the tests or implementation for a slice in the main session. RED is confirmed automatically unless the user asks to confirm it themselves.
 
 ## MCP Permissions
 
