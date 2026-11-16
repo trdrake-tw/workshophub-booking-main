@@ -27,22 +27,22 @@ _Not available. The card description is cut off at this heading ("truncated — 
 
 **Organiser workflow:**
 
-- [ ] The organiser opens the session registrations page (WH-6) and identifies the registration ID they want to investigate
-- [ ] The organiser calls `GET /api/training-sessions/:id/registrations/:registrationId/audit` to see the full state history
-- [ ] The response shows a time-ordered list of transitions, e.g.:
+- [ ] The organiser opens the session registrations page (WH-6) and identifies the registration ID they want to investigate _(Context only: the registrations page is WH-6)_
+- [x] The organiser calls `GET /api/training-sessions/:id/registrations/:registrationId/audit` to see the full state history
+- [x] The response shows a time-ordered list of transitions, e.g.:
   - `null → confirmed` (registered)
   - `confirmed → cancelled` (cancelled)
   - _(for a different registration)_ `null → waitlisted` then `waitlisted → confirmed` (promoted)
-- [ ] This gives the organiser a complete picture of every state a registration has been through
+- [x] This gives the organiser a complete picture of every state a registration has been through
 
 **Data and API behaviour:**
 
-- [ ] An `AuditLog` table is created with: `id`, `registrationId`, `fromStatus`, `toStatus`, `changedAt`, `reason` (optional string)
-- [ ] Every registration state change creates an audit log entry atomically within the same transaction
-- [ ] `GET /api/training-sessions/:id/registrations/:registrationId/audit` returns the full audit history in chronological order
-- [ ] Audit entries are immutable: they cannot be updated or deleted via the API
-- [ ] Returns HTTP 404 if the registration does not exist
-- [ ] The audit log captures all transitions: initial registration, promotion, cancellation
+- [x] An `AuditLog` table is created with: `id`, `registrationId`, `fromStatus`, `toStatus`, `changedAt`, `reason` (optional string)
+- [x] Every registration state change creates an audit log entry atomically within the same transaction
+- [x] `GET /api/training-sessions/:id/registrations/:registrationId/audit` returns the full audit history in chronological order
+- [x] Audit entries are immutable: they cannot be updated or deleted via the API
+- [x] Returns HTTP 404 if the registration does not exist
+- [x] The audit log captures all transitions: initial registration, promotion, cancellation
 
 ## Clarifications
 

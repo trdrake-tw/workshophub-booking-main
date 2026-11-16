@@ -128,6 +128,7 @@ AuditLogService --> AuditLogEntryView : returns
 
 4. Immutability:
    - Only the GET route is added. No service function updates or deletes an entry. Requests with a modifying method on the audit address fall through to Express's default `404`; tests pin that and that the history is unchanged afterwards.
+   - When the frontend build (`app/dist`) exists, `app.ts` registers an SPA catch-all `app.get('*')` that used to answer every unmatched GET, including unknown `/api/...` paths such as `<audit address>/<entry id>`, with `index.html` and `200`. The catch-all now calls `next()` for `/api` and `/api/...` paths so unmatched API GETs reach Express's default `404`. Client-side routes still fall back to the SPA.
 
 5. Risks carried from the analysis and how they are handled:
    - Hand-built transaction mocks in `api/tests/unit/trainingSessionService.test.ts` do not have `auditLog`. The unit test file mocks `recordTransition` at the module boundary (as it does for the notification service), so no existing transaction mock has to change.
@@ -149,7 +150,8 @@ AuditLogService --> AuditLogEntryView : returns
 1. `api/src/routes/training-sessions.ts` imports `getAuditHistory` from `api/src/services/auditLogService.ts`.
 2. `api/src/services/trainingSessionService.ts` imports `recordTransition` and `AUDIT_REASON` from `./auditLogService`.
 3. `api/src/services/auditLogService.ts` imports `prisma` from `../lib/prisma` and the `Prisma` type from `@prisma/client`. It imports nothing from `trainingSessionService.ts` or `notificationService.ts` (no import cycle).
-4. `notificationService.ts`, `app.ts`, `server.ts` and `api/prisma/seed.ts` are unchanged.
+4. `notificationService.ts`, `server.ts` and `api/prisma/seed.ts` are unchanged.
+5. `api/src/app.ts` gains no import and no route; only its SPA catch-all handler changes, to pass `/api` paths on with `next()` (see Operation 7).
 
 ### Layered Architecture
 
@@ -158,7 +160,8 @@ AuditLogService --> AuditLogEntryView : returns
    - `trainingSessionService.ts`: owns the three state changes and decides when a transition happened.
    - `auditLogService.ts`: owns how an entry is written (`recordTransition`) and read (`getAuditHistory`).
 3. Data layer (`api/prisma/schema.prisma`): the `AuditLog` model and its cascade relation.
-4. Error handling: no global handler exists. The service signals "not found" by returning `null`; the route maps it to `404` and unexpected errors to `500`, as the neighbouring routes do.
+4. App layer (`api/src/app.ts`): mounts the routers and, when `app/dist` exists, serves the frontend with an SPA catch-all that leaves `/api` paths to Express's default `404`.
+5. Error handling: no global handler exists. The service signals "not found" by returning `null`; the route maps it to `404` and unexpected errors to `500`, as the neighbouring routes do.
 
 ### Files
 
@@ -168,6 +171,7 @@ AuditLogService --> AuditLogEntryView : returns
 | `api/src/services/auditLogService.ts`                  | New                                                             |
 | `api/src/services/trainingSessionService.ts`           | Three `recordTransition` calls                                  |
 | `api/src/routes/training-sessions.ts`                  | One GET route                                                   |
+| `api/src/app.ts`                                       | SPA catch-all passes `/api` paths on with `next()`              |
 | `api/tests/unit/auditLogService.test.ts`               | New                                                             |
 | `api/tests/unit/trainingSessionService.test.ts`        | Add audit-service mock and new tests                            |
 | `api/tests/integration/wh9-*.test.ts`                  | New, one file per Operation 2 to 7                              |
@@ -326,7 +330,13 @@ Tests — `api/tests/integration/wh9-audit-immutability.test.ts`:
 - `WH-9: reading the history twice returns the same entries`.
 - `WH-9: entries are removed with their registration`: delete the registration row with `prisma.registration.delete`; expect `prisma.auditLog.count({ where: { registrationId } })` to be `0`. This pins decision 6 and proves the existing bulk cleanups keep working.
 
-Implementation: none expected. If a test fails, the fix is to remove whatever route or cascade setting causes it, never to add a modifying route.
+Implementation: no new route and no service change. If a test fails, the fix is to remove whatever route or cascade setting causes it, never to add a modifying route.
+
+Implementation — `api/src/app.ts` (made because `GET <audit address>/<entry id>` answered `200` with the SPA's `index.html` whenever `app/dist` existed):
+
+1. Change the SPA catch-all to `app.get('*', (req: Request, res: Response, next: NextFunction) => { ... })` (`NextFunction` is already imported).
+2. At its top: `if (req.path === '/api' || req.path.startsWith('/api/')) { next(); return }`, with the comment `// Client-side routes fall back to the SPA; unmatched API paths must still 404.`
+3. Otherwise send `index.html` as before. `express.static`, the router mounts and every other line of `app.ts` are unchanged.
 
 ### 8. Verify
 
@@ -382,7 +392,8 @@ Implementation: none expected. If a test fails, the fix is to remove whatever ro
    - Do not add raw queries; the existing `$queryRawUnsafe` search route is a deliberate course fixture and is left alone.
 8. Scope constraints (do-nots):
    - No frontend change, no organiser page, no actor field, no caller-supplied reason, no generic multi-entity audit log, no Prisma client extension or middleware.
-   - No change to `notificationService.ts`, `app.ts`, `server.ts`, `seed.ts`, the `Makefile`, CI workflows, or Jest, ESLint, Prettier and TypeScript config.
+   - No change to `app.ts` beyond the SPA catch-all passing `/api` paths on (Operation 7); it must not gain a route or swallow unmatched API paths again.
+   - No change to `notificationService.ts`, `server.ts`, `seed.ts`, the `Makefile`, CI workflows, or Jest, ESLint, Prettier and TypeScript config.
    - Do not add the missing `promoted` notification to `cancelRegistration`.
    - No new dependency.
 9. Test constraints:

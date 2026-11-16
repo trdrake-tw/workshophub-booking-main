@@ -18,7 +18,12 @@ app.use('/api/admin', adminRouter)
 const frontendDist = path.join(__dirname, '../../app/dist')
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist))
-  app.get('*', (_req: Request, res: Response) => {
+  // Client-side routes fall back to the SPA; unmatched API paths must still 404.
+  app.get('*', (req: Request, res: Response, next: NextFunction) => {
+    if (req.path === '/api' || req.path.startsWith('/api/')) {
+      next()
+      return
+    }
     res.sendFile(path.join(frontendDist, 'index.html'))
   })
 }
