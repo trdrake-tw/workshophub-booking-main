@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# test_writer_blind — Claude Code PreToolUse hook (Read|Grep|Glob).
+# test_writer_blind — Claude Code PreToolUse hook (Read|Grep|Glob|Write|Edit).
 # Keeps the test-writer subagent blind to the implementation:
-#   - Read: denied for anything under api/src/routes/ or api/src/services/.
+#   - Read: denied for anything under api/src/.
 #   - Grep/Glob: the search root must be inside api/tests, api/prisma or stories.
-# Calls from the main session and other agents carry a different (or no)
-# agent_type and pass straight through.
+#   - Write/Edit: the target must be inside api/tests.
+# Registered in the test-writer agent's frontmatter, so it only runs inside that
+# agent. The agent_type check below is a second guard: calls from the main
+# session and other agents carry a different (or no) agent_type and pass through.
 
 INPUT=$(cat)
 AGENT=$(jq -r '.agent_type // empty' <<<"$INPUT")
@@ -33,8 +35,9 @@ resolve() {
   echo "$(cd "$dir" && pwd -P)$rest"
 }
 
-FORBIDDEN=("$ROOT/api/src/routes" "$ROOT/api/src/services")
+FORBIDDEN=("$ROOT/api/src")
 SEARCHABLE=("$ROOT/api/tests" "$ROOT/api/prisma" "$ROOT/stories")
+WRITABLE="$ROOT/api/tests"
 
 under() { [ "$1" = "$2" ] || [[ "$1" = "$2"/* ]]; }
 
@@ -42,7 +45,7 @@ case "$TOOL" in
   Read)
     TARGET=$(resolve "$(jq -r '.tool_input.file_path // empty' <<<"$INPUT")")
     for f in "${FORBIDDEN[@]}"; do
-      under "$TARGET" "$f" && deny "test-writer is blind to the implementation: reading ${TARGET#"$ROOT"/} is not allowed. Derive behaviour from the acceptance criterion and the story."
+      under "$TARGET" "$f" && deny "test-writer is blind to the implementation: reading ${TARGET#"$ROOT"/} is not allowed. Derive behaviour from the navigator packet and the story."
     done
     ;;
   Grep|Glob)
@@ -58,6 +61,13 @@ case "$TOOL" in
       under "$TARGET" "$s" && exit 0
     done
     deny "test-writer may only $TOOL inside api/tests, api/prisma or stories (got ${TARGET#"$ROOT"/})."
+    ;;
+  Write|Edit)
+    RAW=$(jq -r '.tool_input.file_path // empty' <<<"$INPUT")
+    [ -n "$RAW" ] || deny "test-writer $TOOL needs a file_path inside api/tests."
+    TARGET=$(resolve "$RAW")
+    under "$TARGET" "$WRITABLE" && exit 0
+    deny "test-writer may only $TOOL files inside api/tests (got ${TARGET#"$ROOT"/})."
     ;;
 esac
 exit 0
