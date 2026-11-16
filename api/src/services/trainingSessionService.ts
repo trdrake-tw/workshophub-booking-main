@@ -1,5 +1,6 @@
 import type { Prisma, Registration, TrainingSession } from '@prisma/client'
 import prisma from '../lib/prisma'
+import { dispatchNotification } from './notificationService'
 
 export const REGISTRATION_STATUS = {
   confirmed: 'confirmed',
@@ -86,7 +87,7 @@ export async function createRegistration(
   // The conditional update is the capacity decision: if it claims a seat the
   // registration is confirmed, otherwise the session is full and the employee
   // joins the waitlist. The counter can never exceed capacity.
-  return prisma.$transaction(async (tx): Promise<RegistrationResult> => {
+  const result = await prisma.$transaction(async (tx): Promise<RegistrationResult> => {
     const updated = await tx.trainingSession.updateMany({
       where: { id: sessionId, registered: { lt: session.capacity } },
       data: { registered: { increment: 1 } },
@@ -128,6 +129,19 @@ export async function createRegistration(
 
     return { status: 'waitlisted', registration, position }
   })
+
+  // After the commit, so a rolled-back registration is never announced.
+  if (result.status === 'confirmed') {
+    dispatchNotification({
+      status: 'confirmed',
+      name: result.registration.name,
+      email: result.registration.email,
+      sessionTitle: session.title,
+      sessionDate: session.date,
+    })
+  }
+
+  return result
 }
 
 // Hands the freed seat to the first waitlisted registration in the same transaction. Returns its id, or null if nobody could be promoted.
