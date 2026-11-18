@@ -31,7 +31,7 @@ Invoking this command is the approval to commit and push. Don't ask again for th
 3. **Push.** Run `git push -u origin <branch>`. If the push is rejected, show the output and stop. Don't force it.
 
 4. **Open the pull request.** Check for an existing one first with `gh pr view --json url,state`.
-   - If an open pull request exists for this branch, don't create another. Use its URL.
+   - If an open pull request exists for this branch, don't create another. Use its URL, and update its title and body with `gh pr edit` so they describe the whole branch as it now stands.
    - Otherwise run `gh pr create --base main`. Title: `<KEY> <type>(<scope>): <summary>`, covering the whole branch, not just the last commit. Body:
 
      ```markdown
@@ -56,7 +56,7 @@ Invoking this command is the approval to commit and push. Don't ask again for th
    3. If the card is not in that list, move it with `mcp__trello__trelloWriteCard` (`action: "move"`, `cardId`, `listId`, `pos: "top"`).
    4. Add a comment with `mcp__trello__trelloWriteCard` (`action: "add_comment"`): `Pull request: <URL>`. Skip it if the card already has a comment with that URL.
 
-   Only do this step once the pull request exists. If some acceptance criteria are still open, move the card anyway only if the user asked for a partial pull request; otherwise ask whether the card should move.
+   Only do this step once the pull request exists. If some acceptance criteria are still open, don't move the card (unless the user asked you to): leave it where it is and say in the comment which criteria are open.
 
 6. **Report and stop.**
    - the story key and card name
