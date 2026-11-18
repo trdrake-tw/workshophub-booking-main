@@ -38,6 +38,22 @@ model Registration {
   status    String          @default("confirmed")
   createdAt DateTime        @default(now())
   session   TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  auditLogs AuditLog[]
 
   @@map("registrations")
+}
+
+model AuditLog {
+  id             Int          @id @default(autoincrement())
+  registrationId Int
+  // null for the first entry: the registration did not exist before.
+  fromStatus     String?
+  toStatus       String
+  changedAt      DateTime     @default(now())
+  // registered | waitlisted | promoted | cancelled, set by the system.
+  reason         String?
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([registrationId])
+  @@map("audit_logs")
 }

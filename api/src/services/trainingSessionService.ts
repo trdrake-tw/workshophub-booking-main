@@ -1,5 +1,6 @@
 import type { Prisma, Registration, TrainingSession } from '@prisma/client'
 import prisma from '../lib/prisma'
+import { AUDIT_REASON, recordTransition } from './auditLogService'
 import { dispatchNotification } from './notificationService'
 
 export const REGISTRATION_STATUS = {
@@ -102,6 +103,12 @@ export async function createRegistration(
           status: REGISTRATION_STATUS.confirmed,
         },
       })
+      await recordTransition(tx, {
+        registrationId: registration.id,
+        fromStatus: null,
+        toStatus: REGISTRATION_STATUS.confirmed,
+        reason: AUDIT_REASON.registered,
+      })
       return { status: 'confirmed', registration }
     }
 
@@ -112,6 +119,12 @@ export async function createRegistration(
         email: trimmedEmail,
         status: REGISTRATION_STATUS.waitlisted,
       },
+    })
+    await recordTransition(tx, {
+      registrationId: registration.id,
+      fromStatus: null,
+      toStatus: REGISTRATION_STATUS.waitlisted,
+      reason: AUDIT_REASON.waitlisted,
     })
 
     // 1-based position among this session's waitlist, ordered by createdAt
@@ -161,7 +174,15 @@ async function promoteFromWaitlist(
       where: { id: candidate.id, sessionId, status: REGISTRATION_STATUS.waitlisted },
       data: { status: REGISTRATION_STATUS.confirmed },
     })
-    if (promoted.count > 0) return candidate.id
+    if (promoted.count > 0) {
+      await recordTransition(tx, {
+        registrationId: candidate.id,
+        fromStatus: REGISTRATION_STATUS.waitlisted,
+        toStatus: REGISTRATION_STATUS.confirmed,
+        reason: AUDIT_REASON.promoted,
+      })
+      return candidate.id
+    }
     // No match: the candidate changed concurrently, so try the next one.
   }
   return null
@@ -199,6 +220,12 @@ export async function cancelRegistration(
     if (flipped.count === 0) {
       throw { status: 409, error: 'Registration is already cancelled' }
     }
+    await recordTransition(tx, {
+      registrationId,
+      fromStatus: previousStatus,
+      toStatus: REGISTRATION_STATUS.cancelled,
+      reason: AUDIT_REASON.cancelled,
+    })
 
     let promotedRegistrationId: number | null = null
     if (previousStatus === REGISTRATION_STATUS.confirmed) {
